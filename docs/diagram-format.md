@@ -1,163 +1,121 @@
----
-title: diagram.json File Format
-sidebar_label: diagram.json
-description: Reference guide for the `diagram.json` file for Wokwi simulation projects. This file defines components, their attributes, layout positions, and the connections between them.
-keywords: [diagram.json, connections, wiring, component layout, virtual hardware, ESP32, STM32, Arduino, wire placement, simulation diagram, simulation editor]
----
+// Pines Semáforo Vehicular 1 (Vía A)
+const int v1Rojo = 13;
+const int v1Amarillo = 12;
+const int v1Verde = 11;
 
-Each simulation project contains a diagram.json file. This file defines the components
-that will be used for the simulation, their properties, and the connections between the
-components.
+// Pines Semáforo Vehicular 2 (Vía B)
+const int v2Rojo = 10;
+const int v2Amarillo = 9;
+const int v2Verde = 8;
 
-## File structure
+// Pines Semáforo Peatonal 1 (Cruza Vía A)
+const int p1Rojo = 7;
+const int p1Verde = 6;
 
-The diagram file is a JSON file with several sections. The basic file structure is as
-follows:
+// Pines Semáforo Peatonal 2 (Cruza Vía B)
+const int p2Rojo = 5;
+const int p2Verde = 4;
 
-```json
-{
-  "version": 1,
-  "author": "Uri Shaked",
-  "editor": "wokwi",
-  "parts": [],
-  "connections": []
+// Pines de Botones
+const int btnPeaton1 = 2;
+const int btnPeaton2 = 3;
+
+// Variables para recordar si alguien presionó el botón
+volatile bool solicitudP1 = false;
+volatile bool solicitudP2 = false;
+
+void setup() {
+  // Configurar LEDs como salidas
+  for (int pin = 4; pin <= 13; pin++) {
+    pinMode(pin, OUTPUT);
+  }
+
+  // Configurar botones con resistencia interna
+  pinMode(btnPeaton1, INPUT_PULLUP);
+  pinMode(btnPeaton2, INPUT_PULLUP);
+
+  // Interrupciones para detectar los botones en cualquier momento
+  attachInterrupt(digitalPinToInterrupt(btnPeaton1), pedirCruce1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(btnPeaton2), pedirCruce2, FALLING);
+
+  // Estado inicial: Todos los peatones en Rojo
+  digitalWrite(p1Rojo, HIGH);
+  digitalWrite(p2Rojo, HIGH);
 }
-```
 
-`"version"` is always 1, `"author"` is the name of the person who created the
-file, and `"editor"` is the name of the application that was used to edit the
-file ("wokwi").
+void loop() {
+  // --- TURNO VÍA A ---
+  digitalWrite(v1Rojo, LOW);
+  digitalWrite(v1Verde, HIGH);
+  digitalWrite(v2Rojo, HIGH);
+  esperarConChequeo(5000); // 5 segundos en verde
 
-In addition, you can add a `"serialMonitor"` section to [configure the Serial Monitor](guides/serial-monitor#configuring-the-serial-monitor).
+  // Cambio a amarillo Vía A
+  digitalWrite(v1Verde, LOW);
+  digitalWrite(v1Amarillo, HIGH);
+  delay(2000);
+  digitalWrite(v1Amarillo, LOW);
+  digitalWrite(v1Rojo, HIGH);
+  delay(1000); // Tiempo de seguridad todo en rojo
 
-## Parts
+  // Revisar si el Peatón 1 pidió cruzar la Vía A
+  if (solicitudP1) {
+    activarPasoPeatonal(p1Rojo, p1Verde);
+    solicitudP1 = false;
+  }
 
-The `"parts"` section defines the list of components in the simulation.
-It's an array of objects with the following properties:
+  // --- TURNO VÍA B ---
+  digitalWrite(v2Rojo, LOW);
+  digitalWrite(v2Verde, HIGH);
+  esperarConChequeo(5000); // 5 segundos en verde
 
-| Name   | Type    | Description                                     |
-| ------ | ------- | ----------------------------------------------- |
-| id     | string  | the unique identifier of the part (e.g. "led1") |
-| type   | string  | the type of the part (e.g. "wokwi-led")         |
-| left   | number  | x screen coordinate (in pixels)                 |
-| top    | number  | y screen coordinate (in pixels)                 |
-| attrs  | object  | part attributes (e.g. "color" for wokwi-led)    |
-| rotate | number  | rotation in degress (e.g. 90)                   |
-| hide   | boolean | if true, the part won't be visible              |
+  // Cambio a amarillo Vía B
+  digitalWrite(v2Verde, LOW);
+  digitalWrite(v2Amarillo, HIGH);
+  delay(2000);
+  digitalWrite(v2Amarillo, LOW);
+  digitalWrite(v2Rojo, HIGH);
+  delay(1000); // Tiempo de seguridad todo en rojo
 
-`id` and `type` are required, the other fields are optional.
-
-For example, here's how you define a red LED called `"led1"` at position (x=100, y=50):
-
-```json
-{
-  "id": "led1",
-  "type": "wokwi-led",
-  "left": 100,
-  "top": 50,
-  "attrs": {
-    "color": "red"
+  // Revisar si el Peatón 2 pidió cruzar la Vía B
+  if (solicitudP2) {
+    activarPasoPeatonal(p2Rojo, p2Verde);
+    solicitudP2 = false;
   }
 }
-```
 
-:::warning
-Each part must have a unique "id" property. If two parts have the same "id",
-the simulation may not function correctly.
-:::
+// Funciones de interrupción para los botones
+void pedirCruce1() {
+  solicitudP1 = true;
+}
 
-:::tip
-Use `wokwi-cli lint` to validate your diagram.json file and catch common issues like unknown part types, invalid pin connections, and duplicate IDs. See the [CLI Usage guide](wokwi-ci/cli-usage#linting-diagrams) for more details.
-:::
+void pedirCruce2() {
+  solicitudP2 = true;
+}
 
-A partial list of part types (e.g. [wokwi-led](parts/wokwi-led)) can be found under the "Diagram Reference" section of this guide. We're currently working to expand this list. Meanwhile, some of the parts are also documented at [Wokwi Elements](https://elements.wokwi.com).
+// Secuencia segura para el peatón
+void activarPasoPeatonal(int pinRojo, int pinVerde) {
+  digitalWrite(pinRojo, LOW);
+  digitalWrite(pinVerde, HIGH);
+  delay(4000); // Tiempo fijo para cruzar
 
-If your simulation project contains code, the diagram should include a microcontroller part that will execute your code. The following microcontrollers are currently supported:
+  // Parpadeo de advertencia antes de cerrar el paso
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(pinVerde, LOW);
+    delay(300);
+    digitalWrite(pinVerde, HIGH);
+    delay(300);
+  }
 
-- [`wokwi-attiny85`](parts/wokwi-attiny85) - ATtiny85
-- [`wokwi-arduino-nano`](parts/wokwi-arduino-nano) - Arduino Nano
-- [`wokwi-arduino-mega`](parts/wokwi-arduino-mega) - Arduino Mega 2560
-- [`wokwi-arduino-uno`](parts/wokwi-arduino-uno) - Arduino Uno R3
-- [`wokwi-pi-pico`](parts/wokwi-pi-pico) - Raspberry Pi Pico
-- `board-pi-pico-w` - Raspberry Pi Pico W
-- [`board-pi-pico-2`](parts/board-pi-pico-2) - Raspberry Pi Pico 2
-- [`board-pi-pico-2w`](parts/board-pi-pico-2w) - Raspberry Pi Pico 2 W
-- `board-esp32-devkit-c-v4` - ESP32 (official devkit)
-- `wokwi-esp32-devkit-v1` - ESP32 (unofficial devkit)
-- `board-esp32-c3-devkitm-1` - ESP32-C3
-- `board-esp32-c3-rust-1` - ESP32-C3
-- `board-esp32-c5-devkitc-1` - ESP32-C5
-- `board-esp32-c6-devkitc-1` - ESP32-C6
-- `board-esp32-c61-devkitc-1` - ESP32-C61
-- `board-esp32-h2-devkitm-1` - ESP32-H2
-- `board-esp32-s2-devkitm-1` - ESP32-S2
-- [`board-franzininho-wifi`](parts/board-franzininho-wifi) - ESP32-S2
-- `board-esp32-s3-devkitc-1` - ESP32-S3
-- `board-esp32-s31-function-coreboard-1` - ESP32-S31
-- [`board-esp-mosaico`](parts/board-esp-mosaico) - ESP32-S31
-- `board-esp32-p4-preview` - ESP32-P4
-- [`board-st-nucleo-c031c6`](parts/board-st-nucleo-c031c6) - STM32 Nucleo-64 with STM32C031C6 MCU
-- [`board-st-nucleo-l031k6`](parts/board-st-nucleo-l031k6) - STM32 Nucleo-32 with STM32L031K6 MCU
-- `board-xiao-esp32-c3` - ESP32-C3
-- `board-xiao-esp32-c6` - ESP32-C6
-- `board-xiao-esp32-s3` - ESP32-S3
+  digitalWrite(pinVerde, LOW);
+  digitalWrite(pinRojo, HIGH);
+  delay(1000); // Pausa de seguridad antes de dar verde a los autos
+}
 
-:::tip
-Instead of manually specifying the left/top coordinates for each item, you
-can drag them with the mouse to the desired position.
-:::
-
-## Connections
-
-The `"connections"` section defines how the parts are connected. Each connection is an array with four
-items:
-
-- The source component id and pin name, separated by a colon. e.g. `partId:pinName`
-- The target component id and pin name
-- The color of the wire (or an empty string to hide the wire)
-- A list of instructions how to place the wire, as an array of strings (optional)
-
-For example, the following definition will connect the A (anode) pin of `led1`
-to pin 13 of the `uno` part:
-
-```json
-  ["led1:A", "uno:13", "green", []],
-```
-
-You can find the name of a component pin by moving the mouse over it.
-
-### Wire placement mini-language
-
-Each item in the `"connections"` section can specify a list of instructions
-how to draw the lines for the wire. Wires always go in straight lines, either
-horizontally or vertically, and never diagonally.
-
-There are three instructions:
-
-- "v" followed by a number of pixels: move vertically (up/down)
-- "h" followed by a number of pixels: move horizontally (left/right)
-- "\*" can appear only once. All the instructions that appear before the "\*"
-  apply to the source pin, and the instructions that appear after it apply
-  to the target pins.
-
-For example:
-
-```json
-["v10", "h5", "*", "v-15", "h10"]
-```
-
-The "v10" will move 10 pixels down from the source pin, then "h5" will move
-five pixels the right.
-
-The instructions that appear after the "\*" are applied in reverse order: "h10" will
-move 10 pixels right of the target pin, then "v-15" will move 15 pixels up.
-
-Finally, the simulator will connect the two ends of the wire with a combination
-of horizontal and a vertical wire that cover the remaining distance, as necessary.
-
-### Wire placement animation
-
-If you are a visual learner, you may find the following GIF animation useful.
-The animation was created by Steve Sigma.
-
-![diagram.json wire placement mini language](diagram-format-connections.gif)
+// Mantiene el verde vehicular pero permite avanzar normal
+void esperarConChequeo(unsigned long tiempo) {
+  unsigned long inicio = millis();
+  while (millis() - inicio < tiempo) {
+    // El sistema sigue escuchando interrupciones automáticamente
+  }
+}
